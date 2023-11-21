@@ -82,6 +82,7 @@ var ErrNotReady = errors.New("TSDB not ready")
 // millisecond precision timestamps.
 func DefaultOptions() *Options {
 	return &Options{
+		IgnoreWALReadingCorruption:  DefaultIgnoreWALReadingCorruption,
 		WALSegmentSize:              wlog.DefaultSegmentSize,
 		MaxBlockChunkSegmentSize:    chunks.DefaultChunkSegmentSize,
 		RetentionDuration:           int64(15 * 24 * time.Hour / time.Millisecond),
@@ -108,6 +109,9 @@ func DefaultOptions() *Options {
 
 // Options of the DB storage.
 type Options struct {
+	// IgnoreWALReadingCorruption is a flag to ignore WAL corruption during checkpoint creation.
+	IgnoreWALReadingCorruption bool
+
 	// staleSeriesCompactionThreshold is same as below option with same name, but is atomic so that we can do live updates without locks.
 	// This is the one that must be used by the code.
 	staleSeriesCompactionThreshold atomic.Float64
@@ -1182,6 +1186,7 @@ func open(dir string, l *slog.Logger, r prometheus.Registerer, opts *Options, rn
 		// We only override this flag if isolation is disabled at DB level. We use the default otherwise.
 		headOpts.IsolationDisabled = opts.IsolationDisabled
 	}
+	headOpts.IgnoreWALReadingCorruption = opts.IgnoreWALReadingCorruption
 	db.head, err = NewHead(r, l, wal, wbl, headOpts, stats.Head)
 	if err != nil {
 		return nil, err

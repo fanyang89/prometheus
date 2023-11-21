@@ -535,6 +535,8 @@ func main() {
 	serverOnlyFlag(a, "storage.tsdb.wal-compression-type", "Compression algorithm for the tsdb WAL, used when --storage.tsdb.wal-compression is true.").
 		Hidden().Default(compression.Snappy).EnumVar(&tsdbWALCompressionType, compression.Snappy, compression.Zstd)
 
+	serverOnlyFlag(a, "storage.tsdb.ignore-wal-reading-corruption", "Ignore WAL corruption while reading it, if true this will skip all corruption records of WAL and truncate it as normal.").Default("false").BoolVar(&cfg.tsdb.IgnoreWALReadingCorruption)
+
 	serverOnlyFlag(a, "storage.tsdb.head-chunks-write-queue-size", "Size of the queue through which head chunks are written to the disk to be m-mapped, 0 disables the queue completely. Experimental.").
 		Default("0").IntVar(&cfg.tsdb.HeadChunksWriteQueueSize)
 
@@ -566,6 +568,8 @@ func main() {
 
 	agentOnlyFlag(a, "storage.agent.wal-compression-type", "Compression algorithm for the agent WAL, used when --storage.agent.wal-compression is true.").
 		Hidden().Default(compression.Snappy).EnumVar(&agentWALCompressionType, compression.Snappy, compression.Zstd)
+
+	agentOnlyFlag(a, "storage.agent.ignore-wal-replay-corruption", "Ignore WAL corruption while reading it, if true this will skip all corruption records of WAL and truncate it as normal.").Default("false").BoolVar(&cfg.agent.IgnoreWALReadingCorruption)
 
 	agentOnlyFlag(a, "storage.agent.wal-truncate-frequency",
 		"The frequency at which to truncate the WAL and remove old data.").
@@ -1528,6 +1532,7 @@ func main() {
 					"RetentionDuration", cfg.tsdb.RetentionDuration,
 					"WALSegmentSize", cfg.tsdb.WALSegmentSize,
 					"WALCompressionType", cfg.tsdb.WALCompressionType,
+					"IgnoreWALReadingCorruption", cfg.tsdb.IgnoreWALReadingCorruption,
 					"BlockReloadInterval", cfg.tsdb.BlockReloadInterval,
 					"EnableSTAsZeroSample", cfg.tsdb.EnableSTAsZeroSample,
 					"EnableSTStorage", cfg.tsdb.EnableSTStorage,
@@ -2122,6 +2127,7 @@ func (rm *readyScrapeManager) Get() (*scrape.Manager, error) {
 // tsdbOptions is tsdb.Option version with defined units.
 // This is required as tsdb.Option fields are unit agnostic (time).
 type tsdbOptions struct {
+	IgnoreWALReadingCorruption     bool
 	WALSegmentSize                 units.Base2Bytes
 	MaxBlockChunkSegmentSize       units.Base2Bytes
 	RetentionDuration              model.Duration
@@ -2155,6 +2161,7 @@ type tsdbOptions struct {
 
 func (opts tsdbOptions) ToTSDBOptions() tsdb.Options {
 	return tsdb.Options{
+		IgnoreWALReadingCorruption:     opts.IgnoreWALReadingCorruption,
 		WALSegmentSize:                 int(opts.WALSegmentSize),
 		MaxBlockChunkSegmentSize:       int64(opts.MaxBlockChunkSegmentSize),
 		RetentionDuration:              int64(time.Duration(opts.RetentionDuration) / time.Millisecond),
@@ -2191,6 +2198,7 @@ func (opts tsdbOptions) ToTSDBOptions() tsdb.Options {
 // agentOptions is a version of agent.Options with defined units. This is required
 // as agent.Option fields are unit agnostic (time).
 type agentOptions struct {
+	IgnoreWALReadingCorruption   bool
 	WALSegmentSize               units.Base2Bytes
 	WALCompressionType           compression.Type
 	StripeSize                   int
@@ -2209,6 +2217,7 @@ func (opts agentOptions) ToAgentOptions(outOfOrderTimeWindow int64) agent.Option
 		outOfOrderTimeWindow = 0
 	}
 	return agent.Options{
+		IgnoreWALReadingCorruption:   opts.IgnoreWALReadingCorruption,
 		WALSegmentSize:               int(opts.WALSegmentSize),
 		WALCompression:               opts.WALCompressionType,
 		StripeSize:                   opts.StripeSize,

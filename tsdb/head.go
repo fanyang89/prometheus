@@ -243,6 +243,9 @@ type HeadOptions struct {
 
 	// EnableFastStartup enables scraping in parallel with WAL replay but with queries still disabled.
 	EnableFastStartup bool
+
+	// IgnoreWALReadingCorruption allows invalid WAL record sequences to be skipped during checkpoint creation.
+	IgnoreWALReadingCorruption bool
 }
 
 const (
@@ -250,20 +253,23 @@ const (
 	DefaultOutOfOrderCapMax int64 = 32
 	// DefaultSamplesPerChunk provides a default target number of samples per chunk.
 	DefaultSamplesPerChunk = 120
+	// DefaultIgnoreWALReadingCorruption is the default value for ignoring WAL corruption while reading.
+	DefaultIgnoreWALReadingCorruption = false
 )
 
 func DefaultHeadOptions() *HeadOptions {
 	ho := &HeadOptions{
-		ChunkRange:           DefaultBlockDuration,
-		ChunkDirRoot:         "",
-		ChunkPool:            chunkenc.NewPool(),
-		ChunkWriteBufferSize: chunks.DefaultWriteBufferSize,
-		ChunkWriteQueueSize:  chunks.DefaultWriteQueueSize,
-		SamplesPerChunk:      DefaultSamplesPerChunk,
-		StripeSize:           DefaultStripeSize,
-		SeriesCallback:       &noopSeriesLifecycleCallback{},
-		IsolationDisabled:    defaultIsolationDisabled,
-		WALReplayConcurrency: defaultWALReplayConcurrency,
+		IgnoreWALReadingCorruption: DefaultIgnoreWALReadingCorruption,
+		ChunkRange:                 DefaultBlockDuration,
+		ChunkDirRoot:               "",
+		ChunkPool:                  chunkenc.NewPool(),
+		ChunkWriteBufferSize:       chunks.DefaultWriteBufferSize,
+		ChunkWriteQueueSize:        chunks.DefaultWriteQueueSize,
+		SamplesPerChunk:            DefaultSamplesPerChunk,
+		StripeSize:                 DefaultStripeSize,
+		SeriesCallback:             &noopSeriesLifecycleCallback{},
+		IsolationDisabled:          defaultIsolationDisabled,
+		WALReplayConcurrency:       defaultWALReplayConcurrency,
 	}
 	ho.OutOfOrderCapMax.Store(DefaultOutOfOrderCapMax)
 	ho.FloatChunkEncoding.Store(uint32(chunkenc.EncXOR))
@@ -1723,7 +1729,7 @@ func (h *Head) truncateWAL(mint int64) error {
 	}
 
 	h.metrics.checkpointCreationTotal.Inc()
-	if _, err = wlog.Checkpoint(h.logger, h.wal, first, last, h.keepSeriesInWALCheckpointFn(mint), mint, h.opts.EnableSTStorage.Load(), true); err != nil {
+	if _, err = wlog.Checkpoint(h.logger, h.wal, first, last, h.keepSeriesInWALCheckpointFn(mint), mint, h.opts.EnableSTStorage.Load(), true, h.opts.IgnoreWALReadingCorruption); err != nil {
 		h.metrics.checkpointCreationFail.Inc()
 		if _, ok := errors.AsType[*wlog.CorruptionErr](err); ok {
 			h.metrics.walCorruptionsTotal.Inc()

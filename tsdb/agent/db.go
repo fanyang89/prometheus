@@ -60,6 +60,9 @@ var (
 
 // Options of the WAL storage.
 type Options struct {
+	// IgnoreWALReadingCorruption is a flag to ignore WAL corruption during checkpoint creation.
+	IgnoreWALReadingCorruption bool
+
 	// Segments (wal files) max size.
 	// WALSegmentSize <= 0, segment size is default size.
 	// WALSegmentSize > 0, segment size is WALSegmentSize.
@@ -114,14 +117,15 @@ type Options struct {
 // millisecond-precision timestamps.
 func DefaultOptions() *Options {
 	return &Options{
-		WALSegmentSize:       wlog.DefaultSegmentSize,
-		WALCompression:       compression.None,
-		StripeSize:           tsdb.DefaultStripeSize,
-		TruncateFrequency:    DefaultTruncateFrequency,
-		MinWALTime:           DefaultMinWALTime,
-		MaxWALTime:           DefaultMaxWALTime,
-		NoLockfile:           false,
-		OutOfOrderTimeWindow: 0,
+		IgnoreWALReadingCorruption: tsdb.DefaultIgnoreWALReadingCorruption,
+		WALSegmentSize:             wlog.DefaultSegmentSize,
+		WALCompression:             compression.None,
+		StripeSize:                 tsdb.DefaultStripeSize,
+		TruncateFrequency:          DefaultTruncateFrequency,
+		MinWALTime:                 DefaultMinWALTime,
+		MaxWALTime:                 DefaultMaxWALTime,
+		NoLockfile:                 false,
+		OutOfOrderTimeWindow:       0,
 	}
 }
 
@@ -778,7 +782,7 @@ func (db *DB) truncate(mint int64) error {
 		// Head's own replay, the agent's replay treats any unrecognized record type as
 		// corruption. Writing that record here would risk data loss on a downgrade to an
 		// older agent that doesn't know about it.
-		_, err = wlog.Checkpoint(db.logger, db.wal, first, last, db.keepSeriesInWALCheckpointFn(last), mint, db.opts.EnableSTStorage, false)
+		_, err = wlog.Checkpoint(db.logger, db.wal, first, last, db.keepSeriesInWALCheckpointFn(last), mint, db.opts.EnableSTStorage, false, db.opts.IgnoreWALReadingCorruption)
 	}
 
 	if err != nil {

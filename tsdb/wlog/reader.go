@@ -35,6 +35,7 @@ type Reader struct {
 	buf         [pageSize]byte
 	total       int64   // Total bytes processed.
 	curRecTyp   recType // Used for checking that the last record is not torn.
+	ignoreCorr  bool    // Used for ignoring corruption when reading WAL.
 }
 
 // NewReader returns a new reader.
@@ -50,7 +51,7 @@ func (r *Reader) Next() bool {
 		// The last WAL segment record shouldn't be torn(should be full or last).
 		// The last record would be torn after a crash just before
 		// the last record part could be persisted to disk.
-		if r.curRecTyp == recFirst || r.curRecTyp == recMiddle {
+		if len(r.precomprBuf) != 0 && (r.curRecTyp == recFirst || r.curRecTyp == recMiddle) {
 			r.err = errors.New("last record is torn")
 		}
 		return false
@@ -136,7 +137,14 @@ func (r *Reader) nextNew() (err error) {
 			return fmt.Errorf("unexpected checksum %x, expected %x", c, crc)
 		}
 		if err := validateRecord(r.curRecTyp, i); err != nil {
-			return err
+			if !r.ignoreCorr {
+				return err
+			}
+			// Skip the invalid record and reset the fragment buffer before continuing.
+			i = 0
+			r.rec = r.rec[:0]
+			r.precomprBuf = r.precomprBuf[:0]
+			continue
 		}
 
 		r.precomprBuf = append(r.precomprBuf, buf[:length]...)
@@ -193,4 +201,9 @@ func (r *Reader) Offset() int64 {
 		return int64(b.off)
 	}
 	return r.total
+}
+
+// SetIgnoreCorruption allows invalid record sequences to be skipped.
+func (r *Reader) SetIgnoreCorruption() {
+	r.ignoreCorr = true
 }

@@ -160,7 +160,7 @@ const (
 // back with ReadMinValidTime. It is opt-in because not every caller's own replay path
 // tolerates an unrecognized record type equally gracefully; callers that don't consume
 // ReadMinValidTime should pass false.
-func Checkpoint(logger *slog.Logger, w *WL, from, to int, keep func(id chunks.HeadSeriesRef) bool, mint int64, enableSTStorage, writeMinValidTime bool) (*CheckpointStats, error) {
+func Checkpoint(logger *slog.Logger, w *WL, from, to int, keep func(id chunks.HeadSeriesRef) bool, mint int64, enableSTStorage, writeMinValidTime, ignoreCorruption bool) (*CheckpointStats, error) {
 	stats := &CheckpointStats{}
 	var sgmReader io.ReadCloser
 
@@ -241,6 +241,9 @@ func Checkpoint(logger *slog.Logger, w *WL, from, to int, keep func(id chunks.He
 	}
 
 	r := NewReader(sgmReader)
+	if ignoreCorruption {
+		r.SetIgnoreCorruption()
+	}
 
 	var (
 		series                []record.RefSeries
